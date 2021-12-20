@@ -1,2 +1,11 @@
-# stereo_fisheye_calibration
-Scripts to calibrate stereopi fisheye stereo rig
+# APP
+
+## Build
+```
+./build.sh
+```
+
+## Run
+```
+./run.sh -h
+```
