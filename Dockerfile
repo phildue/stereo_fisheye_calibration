@@ -3,7 +3,7 @@ FROM python:3 as builder
 WORKDIR /workspace
 RUN apt update && apt install ffmpeg libsm6 libxext6  -y
 
-RUN pip install opencv-python numpy opencv_contrib_python
+RUN pip install opencv-python numpy opencv_contrib_python pyyaml
 
 
 FROM builder AS runtime
@@ -11,4 +11,4 @@ FROM builder AS runtime
 ADD src src
 
 # Define entrypoint
-ENTRYPOINT ["/usr/bin/python3","src/main.py"]
+ENTRYPOINT ["/usr/bin/python3","src/calibration.py"]

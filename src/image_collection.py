@@ -65,8 +65,9 @@ def find_corners(img,name,checkerboard:Checkerboard,show=True):
 
     cv2.cornerSubPix(img,corners,(3,3),(-1,-1),(cv2.TERM_CRITERIA_EPS+cv2.TERM_CRITERIA_MAX_ITER, 30, 0.1))
     if show:
-        cv2.drawChessboardCorners(img, checkerboard._dimension, corners, ret)
-        cv2.imshow(name, img)
+        img_cp = img.copy()
+        cv2.drawChessboardCorners(img_cp, checkerboard._dimension, corners, ret)
+        cv2.imshow(name, img_cp)
         key = cv2.waitKey(10)
 
     return corners

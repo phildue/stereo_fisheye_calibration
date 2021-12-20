@@ -3,6 +3,7 @@ import cv2
 assert cv2.__version__[0] == '4', 'The fisheye module requires opencv version >= 3.0.0'
 from typing import List
 import numpy as np
+import yaml
 
 from globals import CalibrationException
 
@@ -19,12 +20,22 @@ class Camera:
         self._resolution = resolution
         self._rmse = 0
 
+    def fx(self):
+        return self._K[0,0]
+    def fy(self):
+        return self._K[1,1]
+    def cx(self):
+        return self._K[0,2]
+    def cy(self):
+        return self._K[1,2]
+
     def calibrate(self,objpoints,imgpoints):
         assert len(objpoints) == len(imgpoints)
         N_OK = len(objpoints)
         rvecs = [np.zeros((1, 1, 3), dtype=np.float64) for i in range(N_OK)]
         tvecs = [np.zeros((1, 1, 3), dtype=np.float64) for i in range(N_OK)]
-        calibration_flags = cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC+cv2.fisheye.CALIB_CHECK_COND+cv2.fisheye.CALIB_FIX_SKEW
+        #calibration_flags = cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC+cv2.fisheye.CALIB_CHECK_COND+cv2.fisheye.CALIB_FIX_SKEW
+        calibration_flags = cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC+cv2.fisheye.CALIB_CHECK_COND
         try:
             self._rmse, self._K,self._d, _, _ = cv2.fisheye.calibrate(
                 objpoints,
@@ -45,7 +56,20 @@ class Camera:
     def rectify(self,img:np.array) -> np.array:
         return cv2.remap(img, self._lutX, self._lutY, interpolation=cv2.INTER_LINEAR,borderMode=cv2.BORDER_CONSTANT)
 
-    def to_yaml(self) -> str:
+    def rectify_points(self,points:np.array):
+        points_u_normalized =  cv2.fisheye.undistortPoints(points, self._K, self._d)
+        points_u_normalized = points_u_normalized.reshape(-1,2)
+
+        points_u = np.zeros_like(points_u_normalized)
+
+        for i, (x, y) in enumerate(points_u_normalized):
+            points_u[i,0] = x*self.fx() + self.cx()
+            points_u[i,1] = y*self.fy() + self.cy()
+
+        return points_u
+
+
+    def to_yaml(self, filename:str) -> str:
         def format_mat(x, precision):
             return ("[%s]" % (
                 np.array2string(x, precision=precision, suppress_small=True, separator=", ")
@@ -78,7 +102,18 @@ class Camera:
             "  data: " + format_mat(self._P, 5),
             ""
         ])
-        return yml
+
+        with open(filename, 'w') as f:
+            f.write(yml)
+    def from_yaml(self,filename:str):
+        with open(filename) as f:
+            read_data = yaml.load(f, Loader=yaml.FullLoader)
+            self._K = np.array(read_data['camera_matrix']['data']).reshape(3,3)
+            self._d = np.array(read_data['distortion_coefficients']['data']).reshape(int(read_data['distortion_coefficients']['rows']),int(read_data['distortion_coefficients']['cols']))
+            self._R = np.array(read_data['rectification_matrix']['data']).reshape(3,3)
+            self._P = np.array(read_data['projection_matrix']['data']).reshape(3,4)
+            self._name = read_data['camera_name']
+        self._lutX, self._lutY = cv2.fisheye.initUndistortRectifyMap(self._K, self._d, np.eye(3),self._K, self._resolution, cv2.CV_16SC2)
 
     def __repr__(self) -> str:
         return "Name:{}\nK=\n{}\nd=\n{}\nR=\n{}\nP=\n{}\nCalibration Error (RMSE): {:0.3f}".format(self._name,self._K,self._d,self._R,self._P,self._rmse)
@@ -90,10 +125,13 @@ class StereoCam:
         self._right = Camera(name+"_right", resolution)
         self._name = name
         self._resolution = resolution
+        self._width = resolution[0]
+        self._height = resolution[1]
         self._Q = Q
         self._rmse_l = 0
         self._rmse_r = 0
         self._rmse = 0
+
 
     def calibrate(self,obj_wcs:List[np.array], corners_l:List[np.array], corners_r:List[np.array]):
         assert len(obj_wcs) == len(corners_l) == len(corners_r)
@@ -157,9 +195,76 @@ class StereoCam:
     def rectify_right(self,img:np.array) -> np.array:
         return self._right.rectify(img)
 
+    def rectify_points_left(self,points:np.array) -> np.array:
+        return self._left.rectify_points(points)
+    
+    def rectify_points_right(self,points:np.array) -> np.array:
+        return self._right.rectify_points(points)
+
+
     def __repr__(self) -> str:
         return "Left:\n{}"\
         "\nRight:\n{}"\
         "\nR=\n{}\nt={}"\
         "\nQ=\n{}"\
         "\nCalibration Error (RMSE): {:0.3f}".format(self._left,self._right,self._R,self._t.transpose(),self._Q,self._rmse)
+    
+    def to_yaml(self,folder:str):
+        import os
+        if not os.path.exists(folder):
+            os.mkdir(folder)
+        file_left = folder + "/left.yaml"
+        file_right = folder + "/right.yaml"
+        self._left.to_yaml(file_left)
+        self._right.to_yaml(file_right)
+
+        def format_mat(x, precision):
+            return ("[%s]" % (
+                np.array2string(x, precision=precision, suppress_small=True, separator=", ")
+                    .replace("[", "").replace("]", "").replace("\n", "\n        ")
+            ))
+
+        assert self._Q.shape == (4, 4)
+        assert self._R.shape == (3, 3)
+        assert self._t.shape == (3, 1)
+        yml = "\n".join([
+            "left: left.yaml",
+            "right: right.yaml",
+            "image_width: %d" % self._width,
+            "image_height: %d" % self._height,
+            "camera_name: " + self._name,
+            "disparity_to_depth_matrix:",
+            "  rows: 4",
+            "  cols: 4",
+            "  data: " + format_mat(self._Q, 5),
+            "rotation_matrix:",
+            "  rows: 3",
+            "  cols: 3",
+            "  data: " + format_mat(self._R, 8),
+            "translation_vector:",
+            "  rows: 3",
+            "  cols: 1",
+            "  data: " + format_mat(self._t, 5),
+            ""
+        ])
+        with open(folder+"/stereo.yaml", 'w') as f:
+            f.write(yml)
+
+    def from_yaml(self,foldername:str):
+        with open(foldername + "/stereo.yaml") as f:
+            read_data = yaml.load(f, Loader=yaml.FullLoader)
+            self._left.from_yaml(foldername + "/" + read_data['left'])
+            self._right.from_yaml(foldername + "/" + read_data['right'])
+            self._Q = np.array(read_data['disparity_to_depth_matrix']['data']).reshape(4,4)
+            self._R = np.array(read_data['rotation_matrix']['data']).reshape(3,3)
+            self._t = np.array(read_data['translation_vector']['data']).reshape(3,1)
+            self._name = read_data['camera_name']
+      
+        self._left._lutX, self._left._lutY = cv2.fisheye.initUndistortRectifyMap(
+        self._left._K, self._left._d, self._left._R,
+        self._left._P, self._resolution, cv2.CV_16SC2)
+
+        self._right._lutX, self._right._lutY = cv2.fisheye.initUndistortRectifyMap(
+        self._right._K, self._right._d, self._right._R,
+        self._right._P, self._resolution, cv2.CV_16SC2)
+        

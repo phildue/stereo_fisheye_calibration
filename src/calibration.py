@@ -25,7 +25,7 @@ parser.add_argument('--source_right',
                     default="/dev/video1",
                     )
 parser.add_argument('--iterative', dest='iterative', action='store_true',help="If set attempt to calibrate after each frame to make sure images are useful.")
-parser.add_argument('--max_frames', help='Choose how many frames should be used for calibration', default=max_frames)
+parser.add_argument('--max_frames', help='Choose how many frames should be used for calibration', default=max_frames,type=int)
 
 args = parser.parse_args()
 live_mode = args.source_left.startswith('/dev') or args.source_right.startswith('/dev')
@@ -61,28 +61,42 @@ for grayL,grayR in load_images(args.source_left,args.source_right,image_resoluti
 
 rmse,rmse_l,rmse_r = stereo_rig.calibrate([checkerboard._p3d]*len(corners_l),corners_l,corners_r)
 print ("Calibrated:\n{}".format(stereo_rig))
+
+stereo_rig.to_yaml("./calibration_data")
+
+print ("Stored calibration at ./calibration_data")
+
 print ("Rectifiying..")
+print ("If calibration worked, corners should match chessboard in rectified image.")
 
 for img_left,img_right in load_images(args.source_left,args.source_right,image_resolution):
     
     img_calib_r = stereo_rig.rectify_right(img_right)
     img_calib_l = stereo_rig.rectify_left(img_left)
+    try:
+        corners_r_img  = find_corners(img_right,"Right",checkerboard,False)
+        corners_l_img  = find_corners(img_left,"Left",checkerboard,False)
+        img_left_rect = stereo_rig.rectify_right(img_left)
+        img_right_rect = stereo_rig.rectify_left(img_right)
 
-    cv2.imshow('Left  STEREO CALIBRATED', img_calib_l)
-    cv2.imshow('Right STEREO CALIBRATED', img_calib_r)
-    cv2.waitKey(100)
+        corners_l_rect = stereo_rig.rectify_points_left(corners_l_img)
+        corners_r_rect = stereo_rig.rectify_points_left(corners_r_img)
 
+        corners_r_img_f  = find_corners(img_right_rect,"Right",checkerboard)
+        corners_l_img_f  = find_corners(img_left_rect,"Left",checkerboard)
+        corners_r_img_f = np.reshape(corners_r_img_f,(-1,2))
+        corners_l_img_f = np.reshape(corners_l_img_f,(-1,2))
 
-left_yaml = stereo_rig._left.to_yaml()
-right_yaml = stereo_rig._right.to_yaml()
-print ("Press key to finalize")
+        pixel_error_l = np.linalg.norm(corners_l_rect - corners_l_img_f)/len(corners_l_rect)
+        pixel_error_r = np.linalg.norm(corners_r_rect - corners_r_img_f)/len(corners_r_rect)
+        
+        print ("Average Pixel Error: Left: {}, Right: {}".format(pixel_error_l,pixel_error_r))
 
-cv2.waitKey(0)
+        cv2.drawChessboardCorners(img_left_rect, checkerboard._dimension, corners_l_rect, True)
+        cv2.drawChessboardCorners(img_right_rect, checkerboard._dimension, corners_r_rect, True)
+        cv2.imshow('Left  Rect.', img_left_rect)
+        cv2.imshow('Right Rect.', img_right_rect)
+        cv2.waitKey(0)
+    except CalibrationException:
+        pass
 
-with open('left.yaml', 'w') as f:
-    f.write(left_yaml)
-
-with open('right.yaml', 'w') as f:
-    f.write(right_yaml)
-
-print ("Created: left.yaml, right.yaml")
