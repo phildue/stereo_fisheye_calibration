@@ -1,11 +1,12 @@
 import cv2
 import numpy as np
 
-from settings import CalibrationException
+from globals import CalibrationException
 
-def load_images(source:str,res):
+def load_images(source_left:str,source_right,res):
 
-    if source == "live":
+    if source_left.startswith('/dev') or source_right.startswith('/dev'):
+        #TODO replace this with opencv video capture from /dev
         from picamera import PiCamera
         cam_width = int((res[0]+31)/32)*32
         cam_height = int((res[1]+15)/16)*16
@@ -17,19 +18,22 @@ def load_images(source:str,res):
         camera.framerate = 2
         camera.vflip = True
         for f in camera.capture_continuous(capture, format="bgra",use_video_port=True, resize=res):
-            gray = cv2.cvtColor(f,cv2.COLOR_BGR2GRAY)
-            img_left = gray[:,0:int(gray.shape[1]/2)] #Y+H and X+W
-            img_right = gray[:,int(gray.shape[1]/2):gray.shape[1]]
-            print("Shape Total: {} R: {} L: {}".format(gray.shape,img_left.shape,img_right.shape))
+            f = cv2.cvtColor(f,cv2.COLOR_BGR2GRAY)
+            img_left = f[:,0:int(f.shape[1]/2)] #Y+H and X+W
+            img_right = f[:,int(f.shape[1]/2):f.shape[1]]
             yield img_left,img_right
     else:
         import glob
-        files = glob.glob(source + '/left_*.png')
-        files.sort()
-        for f in files:
-            fright = f.replace('left','right')
-            print ("Loading: {}, {}".format(f,fright))
-            yield cv2.imread(f,cv2.IMREAD_GRAYSCALE),cv2.imread(fright,cv2.IMREAD_GRAYSCALE)
+        files_left = glob.glob(source_left)
+        files_right = glob.glob(source_right)
+
+        files_left.sort()
+        files_right.sort()
+        n_samples = min(len(files_left),len(files_right))
+        for i in range(n_samples):
+            f_left = files_left[i]
+            f_right = files_right[i]
+            yield cv2.resize(cv2.imread(f_left,cv2.IMREAD_GRAYSCALE),res), cv2.resize(cv2.imread(f_right,cv2.IMREAD_GRAYSCALE),res)
 
 
 class Checkerboard:
@@ -51,18 +55,12 @@ def find_corners(img,name,checkerboard:Checkerboard,show=True):
     miny = corners[:,:,1].min()
     maxy = corners[:,:,1].max()
 
-    border_threshold_x = img.shape[1]/7
-    border_threshold_y = img.shape[0]/7
-    print ("thr_X: ", border_threshold_x, "thr_Y:", border_threshold_y)
+    """
+    Prevent subsequent failure if chessboard is too close to the side. 
+    Thanks to: https://github.com/realizator/stereopi-fisheye-robot/blob/master/4_calibration_fisheye.py
+    """
 
-    x_thresh_bad = False
-    if ((minx<border_threshold_x)): # or (loadedX-maxRx < border_threshold_x) or (loadedX-maxLx < border_threshold_x)):
-        x_thresh_bad = True
-    y_thresh_bad = False
-    if ((miny<border_threshold_y) ): # or (loadedY-maxRy < border_threshold_y) or (loadedY-maxLy < border_threshold_y)):
-        y_thresh_bad = True
-    if (y_thresh_bad==True) or (x_thresh_bad==True):
-        ret = False
+    if minx<img.shape[1]/7 or miny < img.shape[0]/7:
         raise CalibrationException("Chessboard too close to side!")
 
     cv2.cornerSubPix(img,corners,(3,3),(-1,-1),(cv2.TERM_CRITERIA_EPS+cv2.TERM_CRITERIA_MAX_ITER, 30, 0.1))

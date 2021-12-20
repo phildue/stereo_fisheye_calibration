@@ -4,7 +4,7 @@ assert cv2.__version__[0] == '4', 'The fisheye module requires opencv version >=
 from typing import List
 import numpy as np
 
-from settings import CalibrationException
+from globals import CalibrationException
 
 class Camera:
     def __init__(self,name:str, resolution:tuple, K = np.eye(3), d = np.zeros((4,1)), R = np.eye(3), P = np.zeros((3,4))):
@@ -17,6 +17,7 @@ class Camera:
         self._width = resolution[0]
         self._height = resolution[1]
         self._resolution = resolution
+        self._rmse = 0
 
     def calibrate(self,objpoints,imgpoints):
         assert len(objpoints) == len(imgpoints)
@@ -25,7 +26,7 @@ class Camera:
         tvecs = [np.zeros((1, 1, 3), dtype=np.float64) for i in range(N_OK)]
         calibration_flags = cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC+cv2.fisheye.CALIB_CHECK_COND+cv2.fisheye.CALIB_FIX_SKEW
         try:
-            rms, self._K,self._d, _, _ = cv2.fisheye.calibrate(
+            self._rmse, self._K,self._d, _, _ = cv2.fisheye.calibrate(
                 objpoints,
                 imgpoints,
                 self._resolution,
@@ -39,7 +40,7 @@ class Camera:
             raise CalibrationException(str(e))
         
         self._lutX, self._lutY = cv2.fisheye.initUndistortRectifyMap(self._K, self._d, np.eye(3),self._K, self._resolution, cv2.CV_16SC2)
-        return rms
+        return self._rmse
     
     def rectify(self,img:np.array) -> np.array:
         return cv2.remap(img, self._lutX, self._lutY, interpolation=cv2.INTER_LINEAR,borderMode=cv2.BORDER_CONSTANT)
@@ -79,6 +80,8 @@ class Camera:
         ])
         return yml
 
+    def __repr__(self) -> str:
+        return "Name:{}\nK=\n{}\nd=\n{}\nR=\n{}\nP=\n{}\nCalibration Error (RMSE): {:0.3f}".format(self._name,self._K,self._d,self._R,self._P,self._rmse)
 class StereoCam:
     def __init__(self,name, resolution:tuple, R=np.eye(3),t=np.zeros((3,1)),Q=np.zeros((4,4))):
         self._R = R
@@ -88,13 +91,17 @@ class StereoCam:
         self._name = name
         self._resolution = resolution
         self._Q = Q
+        self._rmse_l = 0
+        self._rmse_r = 0
+        self._rmse = 0
 
     def calibrate(self,obj_wcs:List[np.array], corners_l:List[np.array], corners_r:List[np.array]):
         assert len(obj_wcs) == len(corners_l) == len(corners_r)
      
-        rms_l = self._left.calibrate(obj_wcs,corners_l)
-        rms_r = self._right.calibrate(obj_wcs,corners_r)
-            # We need a lot of variables to calibrate the stereo camera
+        self._left.calibrate(obj_wcs,corners_l)
+        self._right.calibrate(obj_wcs,corners_r)
+
+        # We need a lot of variables to calibrate the stereo camera
         """
         Based on code from:
         https://gist.github.com/aarmea/629e59ac7b640a60340145809b1c9013
@@ -103,30 +110,36 @@ class StereoCam:
 
         OPTIMIZE_ALPHA = 0.25
 
-        print("Calibrating cameras together...")
-
         pixelsLeft = np.asarray(corners_l, dtype=np.float64)
         pixelsRight = np.asarray(corners_r, dtype=np.float64)
+        objPoints = np.asarray(obj_wcs, dtype=np.float64)
+
         TERMINATION_CRITERIA = (cv2.TERM_CRITERIA_EPS+cv2.TERM_CRITERIA_MAX_ITER, 30, 0.01)
         try:
             # Stereo calibration
-            (rms, _, _, self.R, self.t, _, _) = cv2.fisheye.stereoCalibrate(
-                    obj_wcs, pixelsLeft, pixelsRight,
+            (self._rmse, _,_,_,_ , _, _) = cv2.fisheye.stereoCalibrate(
+                    objPoints, pixelsLeft, pixelsRight,
                     self._left._K, self._left._d,
                     self._right._K, self._right._d,
-                    self._resolution, None, None,
+                    self._resolution, self._R,  self._t,
                     cv2.CALIB_FIX_INTRINSIC, TERMINATION_CRITERIA)
         except Exception as e:
             raise CalibrationException(str(e))
-       
-        # Rectify calibration results
-        self._left._R, self._right._R, self._left._P, self._right._P, self._Q = cv2.fisheye.stereoRectify(
-                        self._left._K, self._left._d,
-                        self._right._K, self._right._d,
-                        self._resolution, self._R, self._t,
-                        cv2.CALIB_ZERO_DISPARITY,
-                        None, None, None, None, None,
-                        (0,0) , 0, 0)
+
+        try:
+            self._left._R, self._right._R, self._left._P, self._right._P, self._Q = cv2.fisheye.stereoRectify(
+                            self._left._K, self._left._d,
+                            self._right._K, self._right._d,
+                            self._resolution, self._R, self._t,
+                            cv2.CALIB_ZERO_DISPARITY,
+                            None, None, None, None, None,
+                            (0,0) , 0, 0)
+        except Exception as e:
+            raise CalibrationException(str(e))
+        
+
+        # Taken from ros2
+        # Seems computation of P goes wrong in stereo rectify we compute it manually here
         self._left._P[:3,:3] = np.dot(self._left._K,self._left._R)
         self._right._P[:3,:3] = np.dot(self._right._K,self._right._R)
 
@@ -138,7 +151,7 @@ class StereoCam:
         self._right._K, self._right._d, self._right._R,
         self._right._P, self._resolution, cv2.CV_16SC2)
         
-        return rms, rms_l, rms_r
+        return self._rmse, self._left._rmse, self._right._rmse
     
     def rectify_left(self,img:np.array) -> np.array:
         return self._left.rectify(img)
@@ -146,4 +159,9 @@ class StereoCam:
     def rectify_right(self,img:np.array) -> np.array:
         return self._right.rectify(img)
 
-
+    def __repr__(self) -> str:
+        return "Left:\n{}"\
+        "\nRight:\n{}"\
+        "\nR=\n{}\nt={}"\
+        "\nQ=\n{}"\
+        "\nCalibration Error (RMSE): {:0.3f}".format(self._left,self._right,self._R,self._t.transpose(),self._Q,self._rmse)
