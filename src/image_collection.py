@@ -6,23 +6,30 @@ from globals import CalibrationException
 def load_images(source_left:str,source_right,res):
 
     if source_left.startswith('/dev') or source_right.startswith('/dev'):
+        print ("Live Mode..")
         #TODO replace this with opencv video capture from /dev
         from picamera import PiCamera
-        cam_width = int((res[0]+31)/32)*32
+        cam_width = int((res[0]+31)/32)*32*2
         cam_height = int((res[1]+15)/16)*16
 
         # Initialize the camera
-        capture = np.zeros((res[1], res[0], 4), dtype=np.uint8)
+        capture = np.zeros((res[1], res[0]*2, 4), dtype=np.uint8)
         camera = PiCamera(stereo_mode='side-by-side', stereo_decimate=False)
         camera.resolution=(cam_width, cam_height)
         camera.framerate = 2
-        camera.vflip = True
-        for f in camera.capture_continuous(capture, format="bgra",use_video_port=True, resize=res):
+        #camera.vflip = True
+        print ("Streaming..")
+        i = 0
+        for f in camera.capture_continuous(capture, format="bgra",use_video_port=True, resize=(cam_width,cam_height)):
+            i += 1
             f = cv2.cvtColor(f,cv2.COLOR_BGR2GRAY)
-            img_left = f[:,0:int(f.shape[1]/2)] #Y+H and X+W
-            img_right = f[:,int(f.shape[1]/2):f.shape[1]]
+            img_right = f[:,0:int(f.shape[1]/2)] #Y+H and X+W
+            img_left = f[:,int(f.shape[1]/2):f.shape[1]]
+            print ("Frame: %d" % i)
+
             yield img_left,img_right
     else:
+        print("Collecting images..")
         import glob
         files_left = glob.glob(source_left)
         files_right = glob.glob(source_right)
@@ -50,6 +57,7 @@ def find_corners(img,name,checkerboard:Checkerboard,show=True):
     
     if ret == False:
         raise CalibrationException("No chessboard found!")
+    print ( "Chessboard found!")
     minx = corners[:,:,0].min()
     maxx = corners[:,:,0].max()
     miny = corners[:,:,1].min()

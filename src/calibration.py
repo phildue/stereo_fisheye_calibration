@@ -25,6 +25,7 @@ parser.add_argument('--source_right',
                     default="/dev/video1",
                     )
 parser.add_argument('--iterative', dest='iterative', action='store_true',help="If set attempt to calibrate after each frame to make sure images are useful.")
+parser.add_argument('--verbose', dest='verbose', action='store_true',help="If set errors during calibration are printed.")
 parser.add_argument('--max_frames', help='Choose how many frames should be used for calibration', default=max_frames,type=int)
 
 args = parser.parse_args()
@@ -35,7 +36,9 @@ corners_r = [] # 2d points in image plane right camera.
 fNo = 0
 for grayL,grayR in load_images(args.source_left,args.source_right,image_resolution):
     loadedY, loadedX  =  grayL.shape
-
+    cv2.imshow("Left",grayL)
+    cv2.imshow("Right",grayR)
+    key = cv2.waitKey(10)
     try:
         corners_r_img  = find_corners(grayR,"Right",checkerboard)
         corners_l_img  = find_corners(grayL,"Left",checkerboard)
@@ -43,10 +46,14 @@ for grayL,grayR in load_images(args.source_left,args.source_right,image_resoluti
         if args.iterative:
             corners_r_tmp = corners_r.copy()
             corners_l_tmp = corners_l.copy()
-            rmse,rmse_l,rmse_r = stereo_rig.calibrate([checkerboard._p3d]*len(corners_l),corners_l,corners_r)
+            corners_r_tmp.append(corners_r_img)
+            corners_l_tmp.append(corners_l_img)
+            rmse,rmse_l,rmse_r = stereo_rig.calibrate([checkerboard._p3d]*len(corners_l_tmp),corners_l_tmp,corners_r_tmp)
             print ("Calibrated:\n{}".format(stereo_rig))
 
         if live_mode:
+            if not os.path.exists("./calibration_images"):
+                os.mkdir("./calibration_images")
             cv2.imwrite("./calibration_images/left_{}.png".format(fNo),grayL)
             cv2.imwrite("./calibration_images/right_{}.png".format(fNo),grayR)
         
@@ -54,10 +61,12 @@ for grayL,grayR in load_images(args.source_left,args.source_right,image_resoluti
         corners_l.append(corners_l_img)
         corners_r.append(corners_r_img)
         fNo += 1
-        if fNo > args.max_frames:
+        print("{} out of {} samples. Press q to stop collection.".format(fNo,args.max_frames))
+        if fNo > args.max_frames or key == ord('q'):
             break
-    except CalibrationException:
-        pass
+    except CalibrationException as e:
+        if args.verbose:
+           print(e)
 
 rmse,rmse_l,rmse_r = stereo_rig.calibrate([checkerboard._p3d]*len(corners_l),corners_l,corners_r)
 print ("Calibrated:\n{}".format(stereo_rig))
