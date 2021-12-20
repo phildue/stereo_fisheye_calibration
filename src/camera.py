@@ -1,3 +1,4 @@
+from os import X_OK
 import cv2
 
 assert cv2.__version__[0] == '4', 'The fisheye module requires opencv version >= 3.0.0'
@@ -34,8 +35,8 @@ class Camera:
         N_OK = len(objpoints)
         rvecs = [np.zeros((1, 1, 3), dtype=np.float64) for i in range(N_OK)]
         tvecs = [np.zeros((1, 1, 3), dtype=np.float64) for i in range(N_OK)]
-        #calibration_flags = cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC+cv2.fisheye.CALIB_CHECK_COND+cv2.fisheye.CALIB_FIX_SKEW
-        calibration_flags = cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC+cv2.fisheye.CALIB_CHECK_COND
+        calibration_flags = cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC+cv2.fisheye.CALIB_CHECK_COND+cv2.fisheye.CALIB_FIX_SKEW
+        #calibration_flags = cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC+cv2.fisheye.CALIB_CHECK_COND
         try:
             self._rmse, self._K,self._d, _, _ = cv2.fisheye.calibrate(
                 objpoints,
@@ -205,12 +206,28 @@ class StereoCam:
     def rectify_right(self,img:np.array) -> np.array:
         return self._right.rectify(img)
 
-    def  rectify_points_left(self,points:np.array) -> np.array:
+    def rectify_points_left(self,points:np.array) -> np.array:
         return self._left.rectify_points(points)
     
     def rectify_points_right(self,points:np.array) -> np.array:
         return self._right.rectify_points(points)
 
+    def compute_epipolar_line(self,uv_left:np.array,min_depth=0.001,max_depth=1000) -> np.array:
+        assert uv_left.shape == (2,) or uv_left.shape == (2,1)
+        assert max_depth > min_depth
+
+        p_ccs_max = self._left.image2camera(np.array(uv_left),max_depth)
+        p_ccs_min = self._left.image2camera(np.array(uv_left),min_depth)
+        
+        p_ccs_right_max = np.dot(self._R,p_ccs_max) + self._t
+        p_ccs_right_min = np.dot(self._R,p_ccs_min) + self._t
+        uv_right_max = self._right.camera2image(p_ccs_right_max)
+        uv_right_min = self._right.camera2image(p_ccs_right_min)
+        duv = uv_right_max-uv_right_min
+        m = duv[1]/duv[0]
+        c = uv_right_max[1] - m * uv_right_max[0]
+        return np.array([m.item(),-1,c.item()])
+       
 
     def __repr__(self) -> str:
         return "Left:\n{}"\

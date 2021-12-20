@@ -57,7 +57,7 @@ def find_corners(img,name,checkerboard:Checkerboard,show=True):
     
     if ret == False:
         raise CalibrationException("No chessboard found!")
-    print ( "Chessboard found!")
+        
     minx = corners[:,:,0].min()
     maxx = corners[:,:,0].max()
     miny = corners[:,:,1].min()
