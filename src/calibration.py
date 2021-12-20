@@ -69,31 +69,45 @@ print ("Stored calibration at ./calibration_data")
 print ("Rectifiying..")
 print ("If calibration worked, corners should match chessboard in rectified image.")
 
+def draw_epipolar_line(uv,img_source,img):
+    max_depth = 1000
+    min_depth = 0.001
+    p_ccs_max = stereo_rig._left.image2camera(np.array(uv),max_depth)
+    p_ccs_min = stereo_rig._left.image2camera(np.array(uv),min_depth)
+    
+    p_ccs_right_max = np.dot(stereo_rig._R,p_ccs_max) + stereo_rig._t
+    p_ccs_right_min = np.dot(stereo_rig._R,p_ccs_min) + stereo_rig._t
+    uv_right_max = stereo_rig._right.camera2image(p_ccs_right_max)
+    uv_right_min = stereo_rig._right.camera2image(p_ccs_right_min)
+    cv2.circle(img_source,uv.astype(int),2,(255,255,255))
+    cv2.line(img,uv_right_min.reshape(2,).astype(int),uv_right_max.reshape(2,).astype(int),(255,255,255))
+
+
 for img_left,img_right in load_images(args.source_left,args.source_right,image_resolution):
     
     img_calib_r = stereo_rig.rectify_right(img_right)
     img_calib_l = stereo_rig.rectify_left(img_left)
     try:
-        corners_r_img  = find_corners(img_right,"Right",checkerboard,False)
-        corners_l_img  = find_corners(img_left,"Left",checkerboard,False)
         img_left_rect = stereo_rig.rectify_right(img_left)
         img_right_rect = stereo_rig.rectify_left(img_right)
+        corners_l_img  = find_corners(img_left_rect,"Left",checkerboard,True)
+        corners_l_img = corners_l_img.reshape(-1,2)
+       
+        draw_epipolar_line(corners_l_img[0,:],img_left_rect,img_right_rect)
+        draw_epipolar_line(corners_l_img[-1,:],img_left_rect,img_right_rect)
+          
+        #corners_r_img_f  = find_corners(img_right_rect,"Right",checkerboard)
+        #corners_l_img_f  = find_corners(img_left_rect,"Left",checkerboard)
+        #corners_r_img_f = np.reshape(corners_r_img_f,(-1,2))
+        #corners_l_img_f = np.reshape(corners_l_img_f,(-1,2))
 
-        corners_l_rect = stereo_rig.rectify_points_left(corners_l_img)
-        corners_r_rect = stereo_rig.rectify_points_left(corners_r_img)
-
-        corners_r_img_f  = find_corners(img_right_rect,"Right",checkerboard)
-        corners_l_img_f  = find_corners(img_left_rect,"Left",checkerboard)
-        corners_r_img_f = np.reshape(corners_r_img_f,(-1,2))
-        corners_l_img_f = np.reshape(corners_l_img_f,(-1,2))
-
-        pixel_error_l = np.linalg.norm(corners_l_rect - corners_l_img_f)/len(corners_l_rect)
-        pixel_error_r = np.linalg.norm(corners_r_rect - corners_r_img_f)/len(corners_r_rect)
+        #pixel_error_l = np.linalg.norm(corners_l_rect - corners_l_img_f)/len(corners_l_rect)
+        #pixel_error_r = np.linalg.norm(corners_r_rect - corners_r_img_f)/len(corners_r_rect)
         
-        print ("Average Pixel Error: Left: {}, Right: {}".format(pixel_error_l,pixel_error_r))
+        #print ("Average Pixel Error: Left: {}, Right: {}".format(pixel_error_l,pixel_error_r))
 
-        cv2.drawChessboardCorners(img_left_rect, checkerboard._dimension, corners_l_rect, True)
-        cv2.drawChessboardCorners(img_right_rect, checkerboard._dimension, corners_r_rect, True)
+        #cv2.drawChessboardCorners(img_left_rect, checkerboard._dimension, corners_l_rect, True)
+        #cv2.drawChessboardCorners(img_right_rect, checkerboard._dimension, corners_r_rect, True)
         cv2.imshow('Left  Rect.', img_left_rect)
         cv2.imshow('Right Rect.', img_right_rect)
         cv2.waitKey(0)

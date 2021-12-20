@@ -68,6 +68,16 @@ class Camera:
 
         return points_u
 
+    def image2camera(self,uv:np.array,z = 1):
+        assert uv.shape == (2,) or uv.shape == (2,1)
+        uv1 = np.array([[uv[0],uv[1],1]]).transpose()
+        return z * np.dot(np.linalg.inv(self._K),uv1)
+    
+    def camera2image(self,p_ccs):
+        assert p_ccs.shape == (3,) or p_ccs.shape == (3,1)
+        p_img = np.dot(self._K,p_ccs)
+        p_img /= p_img[2]
+        return np.array([p_img[0],p_img[1]])
 
     def to_yaml(self, filename:str) -> str:
         def format_mat(x, precision):
@@ -195,7 +205,7 @@ class StereoCam:
     def rectify_right(self,img:np.array) -> np.array:
         return self._right.rectify(img)
 
-    def rectify_points_left(self,points:np.array) -> np.array:
+    def  rectify_points_left(self,points:np.array) -> np.array:
         return self._left.rectify_points(points)
     
     def rectify_points_right(self,points:np.array) -> np.array:
