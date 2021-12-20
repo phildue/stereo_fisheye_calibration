@@ -34,3 +34,9 @@ options:
 ```
 ./run.sh --source_left "./calibration_images/left*.png" --source_right "./calibration_images/right*.png" --max_frames 50
 ```
+
+### Verify Calibration
+
+With correct calibration matching corners should be close to epipolar line:
+
+![Epipolar Correspondance](doc/verify.png)

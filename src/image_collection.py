@@ -57,7 +57,7 @@ def find_corners(img,name,checkerboard:Checkerboard,show=True):
     
     if ret == False:
         raise CalibrationException("No chessboard found!")
-        
+
     minx = corners[:,:,0].min()
     maxx = corners[:,:,0].max()
     miny = corners[:,:,1].min()
@@ -68,8 +68,8 @@ def find_corners(img,name,checkerboard:Checkerboard,show=True):
     Thanks to: https://github.com/realizator/stereopi-fisheye-robot/blob/master/4_calibration_fisheye.py
     """
 
-    if minx<img.shape[1]/7 or miny < img.shape[0]/7:
-        raise CalibrationException("Chessboard too close to side!")
+    #if minx<img.shape[1]/7 or miny < img.shape[0]/7:
+    #    raise CalibrationException("Chessboard too close to side!")
 
     cv2.cornerSubPix(img,corners,(3,3),(-1,-1),(cv2.TERM_CRITERIA_EPS+cv2.TERM_CRITERIA_MAX_ITER, 30, 0.1))
     if show:
