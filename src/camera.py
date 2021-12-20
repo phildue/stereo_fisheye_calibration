@@ -101,7 +101,6 @@ class StereoCam:
         self._left.calibrate(obj_wcs,corners_l)
         self._right.calibrate(obj_wcs,corners_r)
 
-        # We need a lot of variables to calibrate the stereo camera
         """
         Based on code from:
         https://gist.github.com/aarmea/629e59ac7b640a60340145809b1c9013
@@ -116,7 +115,6 @@ class StereoCam:
 
         TERMINATION_CRITERIA = (cv2.TERM_CRITERIA_EPS+cv2.TERM_CRITERIA_MAX_ITER, 30, 0.01)
         try:
-            # Stereo calibration
             (self._rmse, _,_,_,_ , _, _) = cv2.fisheye.stereoCalibrate(
                     objPoints, pixelsLeft, pixelsRight,
                     self._left._K, self._left._d,
@@ -138,7 +136,7 @@ class StereoCam:
             raise CalibrationException(str(e))
         
 
-        # Taken from ros2
+        # Taken from ros2: https://github.com/ros-perception/image_pipeline/blob/8040dc8af10e04292ac181b2e9ab1edecad3758c/camera_calibration/src/camera_calibration/calibrator.py#L1216
         # Seems computation of P goes wrong in stereo rectify we compute it manually here
         self._left._P[:3,:3] = np.dot(self._left._K,self._left._R)
         self._right._P[:3,:3] = np.dot(self._right._K,self._right._R)

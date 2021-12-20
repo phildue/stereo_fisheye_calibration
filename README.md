@@ -2,6 +2,8 @@
 
 Calibrate fisheye stereo rig on raspberry pi (stereopi v2)
 
+Thanks to the [stereopi tutorial](https://github.com/realizator/stereopi-fisheye-robot/blob/master/4_calibration_fisheye.py) as well as [ROS2 Image Pipeline](https://github.com/ros-perception/image_pipeline/tree/noetic/camera_calibration/src/camera_calibration)
+
 ## Build
 ```
 ./build.sh
