@@ -1,6 +1,6 @@
 # Stereo Fisheye Calibration
 
-Calibrate fisheye stereo rig on raspberry pi (stereopi v2)
+Calibrate fisheye stereo rig on raspberry pi (stereopi v2). The tool will create .yaml files as used by the ROS2 stereo_image_proc. In contrast to the live calibration tool of ROS2 image_pipeline package here the calibration can be live as well as online. Also it contains a workaround to the opencv crashes when some "bad" images are in the dataset by attemptingto calibrate after each new frame before adding it to the set (--iterative).
 
 Thanks to the [stereopi tutorial](https://github.com/realizator/stereopi-fisheye-robot/blob/master/4_calibration_fisheye.py) as well as [ROS2 Image Pipeline](https://github.com/ros-perception/image_pipeline/tree/noetic/camera_calibration/src/camera_calibration)
 
