@@ -213,6 +213,9 @@ class StereoCam:
         return self._right.rectify_points(points)
 
     def compute_epipolar_line(self,uv_left:np.array,min_depth=0.001,max_depth=1000) -> np.array:
+        """
+        Compute epipolar line based on reprojection. In stereo setup this should normally return m = 0, c = y_left = y_right
+        """
         assert uv_left.shape == (2,) or uv_left.shape == (2,1)
         assert max_depth > min_depth
 

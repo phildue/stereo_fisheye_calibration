@@ -70,17 +70,17 @@ print ("Rectifiying..")
 print ("If calibration worked, corresponding corners should be on epipolar line.")
 
 def compute_epipolar_distance(uv_left,uv_right,img_left=None,img_right=None):
-    line = stereo_rig.compute_epipolar_line(uv_left)
-    a = line[0]
-    b = line[1]
-    c = line[2]
-    d = np.abs(a*uv_right[0]+b*uv_right[1]+c)/np.sqrt(a**2+b**2) # distance line to point
+    epipolar_line = np.array([0,-1,uv_left[1]])#[a b c] line representation
+ 
+    d = np.abs(uv_left[1]-uv_right[1])
     if img_left is not None and img_right is not None:
-        uv_right_min = np.array([0.0,line[2]])
-        uv_right_max = np.array([img_right.shape[1],line[0]*img_right.shape[1]+line[2]])
+        uv_right_min = np.array([0.0,epipolar_line[2]])
+        uv_right_max = np.array([img_right.shape[1],epipolar_line[0]*img_right.shape[1]+epipolar_line[2]])
         cv2.circle(img_left,uv_left.astype(int),2,(255,255,255))
         cv2.line(img_right,uv_right_min.reshape(2,).astype(int),uv_right_max.reshape(2,).astype(int),(255,255,255))
         cv2.circle(img_right_rect,uv_right.astype(int),2,(255,255,255))
+    print("Epipolar Distance: ({:.3f},{:.3f})-->({:.3f},{:.3f}) = {:.3f}".format(uv_left[0],uv_left[1],uv_right[0],uv_right[1],d))
+    
     return d
 
 ds = []
@@ -101,7 +101,6 @@ for img_left,img_right in load_images(args.source_left,args.source_right,image_r
         
         ds.append(d0)
         ds.append(d1)
-        print("Avg Epipolar Error: {}".format((d0+d1)/2))
      
         cv2.imshow('Left  Rect.', img_left_rect)
         cv2.imshow('Right Rect.', img_right_rect)
